@@ -120,6 +120,7 @@ a{color:inherit}
 /* the flowing fire ring */
 .hero-cta::before,.hero-cta::after{
   content:"";position:absolute;inset:-3px;z-index:-1;
+  background:linear-gradient(120deg,var(--ember),var(--molten),var(--magma)); /* old-browser fallback */
   background:conic-gradient(from var(--flow),
     var(--ember),var(--molten),var(--magma),var(--ember));
   animation:flow 3.5s linear infinite;
@@ -556,31 +557,31 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
 </footer>
 
 <script>
-/* ============ Fire scales hero — burning ============ */
+/* ============ Fire scales hero — burning (optimized) ============ */
 (() => {
   const canvas = document.getElementById('scales');
   const ctx = canvas.getContext('2d');
   const hero = canvas.parentElement;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const SIZE = 18;            // scale radius
+  const SIZE = 18;
   const COL_STEP = SIZE * 1.7;
   const ROW_STEP = SIZE * 1.05;
-  const RADIUS = 120;         // cursor influence radius
-  const CURSOR_HEAT = 0.35;   // max heat the cursor can add (kept below ember threshold)
-  const DECAY = 0.94;         // per-frame cooling
-  const RISE = 0.5;           // how much heat climbs to the scale above
-  const MAX_PARTS = 260;      // ember particle cap
+  const RADIUS = 120;          // cursor influence radius
+  const CURSOR_HEAT = 0.35;    // max heat the cursor can add
+  const DECAY = 0.89;          // per-tick cooling (tuned for 30fps)
+  const RISE = 0.5;            // how much heat climbs to the scale above
+  const MAX_PARTS = 200;
+  const FPS = 30;              // fire doesn't need 60
+  const FRAME = 1000 / FPS;
 
-  // palette stops for base coloring (deep red -> ember -> molten -> magma)
-  const stops = [
-    [122,14,0], [255,61,28], [255,174,0], [255,30,94]
-  ];
+  const stops = [[122,14,0],[255,61,28],[255,174,0],[255,30,94]];
   const goldHot = [255,214,120];
   const whiteHot = [255,246,220];
 
   let scales = [], parts = [], W = 0, H = 0, dpr = 1, cols = 0;
-  let mx = -9999, my = -9999;
+  let cold = null, glowSprite = null, emberSprite = null;
+  let mx = -9999, my = -9999, running = true, lastT = 0;
 
   const lerp = (a,b,t) => a + (b-a)*t;
   const mix = (c1,c2,t) => [lerp(c1[0],c2[0],t), lerp(c1[1],c2[1],t), lerp(c1[2],c2[2],t)];
@@ -592,12 +593,36 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
     return mix(stops[i], stops[i+1], t - i);
   }
 
+  function scalePath(c, s, swell) {
+    c.beginPath();
+    c.arc(s.x, s.y, SIZE * swell, Math.PI, 0);
+    c.lineTo(s.x + SIZE, s.y + ROW_STEP);
+    c.lineTo(s.x - SIZE, s.y + ROW_STEP);
+    c.closePath();
+  }
+
+  // pre-rendered radial sprites: no gradient objects created per frame
+  function makeSprite(px, inner, mid, alpha) {
+    const c = document.createElement('canvas');
+    c.width = c.height = px;
+    const g2 = c.getContext('2d');
+    const g = g2.createRadialGradient(px/2, px/2, 0, px/2, px/2, px/2);
+    g.addColorStop(0, `rgba(${inner},${alpha})`);
+    g.addColorStop(0.45, `rgba(${mid},${alpha*0.55})`);
+    g.addColorStop(1, `rgba(${mid},0)`);
+    g2.fillStyle = g;
+    g2.fillRect(0, 0, px, px);
+    return c;
+  }
+
   function build() {
-    dpr = Math.min(devicePixelRatio || 1, 2);
+    dpr = Math.min(devicePixelRatio || 1, 1.5);
     W = hero.clientWidth; H = hero.clientHeight;
+    if (W * H * dpr * dpr > 1.6e6) dpr = 1;   // big screens: trade sharpness for speed
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    scales = [];
+
+    scales = []; parts = [];
     const rows = Math.ceil(H / ROW_STEP) + 2;
     cols = Math.ceil(W / COL_STEP) + 2;
     for (let r = 0; r < rows; r++) {
@@ -605,115 +630,111 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
       for (let c = 0; c < cols; c++) {
         const x = c * COL_STEP - COL_STEP/2 + offset;
         const y = r * ROW_STEP - ROW_STEP/2;
-        scales.push({x, y, base: baseColor(x, y), heat: 0, phase: Math.random()*Math.PI*2});
+        const phase = Math.random() * Math.PI * 2;
+        scales.push({x, y, base: baseColor(x, y), heat: 0, phase});
       }
     }
+
+    // bake the resting field once — per-frame work only touches hot scales
+    cold = document.createElement('canvas');
+    cold.width = W * dpr; cold.height = H * dpr;
+    const cc = cold.getContext('2d');
+    cc.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cc.strokeStyle = 'rgba(11,5,3,.55)';
+    cc.lineWidth = 1.5;
+    for (const s of scales) {
+      const shimmer = 0.10 + 0.12 * Math.sin(s.phase); // static bake of the flicker
+      const col = mix([11,5,3], s.base, 0.34 + shimmer * 0.5);
+      scalePath(cc, s, 1);
+      cc.fillStyle = `rgb(${col[0]|0},${col[1]|0},${col[2]|0})`;
+      cc.fill();
+      cc.stroke();
+    }
+
+    glowSprite = makeSprite(96, '255,190,80', '255,70,15', 0.34);
+    emberSprite = makeSprite(24, '255,240,190', '255,120,30', 0.9);
   }
 
   function update(time) {
     const t = time * 0.001;
     for (let i = 0; i < scales.length; i++) {
       const s = scales[i];
-
-      // convection: heat rises from the scale below (one row per frame)
       const below = scales[i + cols];
       if (below && below.heat * RISE > s.heat) s.heat = below.heat * RISE;
 
-      // cursor warms locally — subtle
       const d = Math.hypot(s.x - mx, s.y - my);
       if (d < RADIUS) s.heat = Math.max(s.heat, (1 - d / RADIUS) * CURSOR_HEAT);
 
-      // the bottom edge smolders on its own — ambient fire line
-      if (!reduced && s.y > H - ROW_STEP * 2.4) {
+      if (s.y > H - ROW_STEP * 2.4) {
         const smolder = 0.30 + 0.30 * Math.sin(t*2.1 + s.x*0.045) * Math.sin(t*3.3 + s.phase);
-        s.heat = Math.max(s.heat, smolder);
+        if (smolder > s.heat) s.heat = smolder;
       }
 
       s.heat *= DECAY;
+      if (s.heat < 0.005) { s.heat = 0; continue; }
 
-      // spawn rising embers off hot scales
-      if (!reduced && s.heat > 0.45 && parts.length < MAX_PARTS && Math.random() < s.heat * 0.06) {
+      if (s.heat > 0.45 && parts.length < MAX_PARTS && Math.random() < s.heat * 0.08) {
         parts.push({
-          x: s.x + (Math.random()-0.5) * SIZE,
-          y: s.y,
-          vx: (Math.random()-0.5) * 0.5,
-          vy: -(0.8 + Math.random() * 1.6),
-          life: 1,
-          size: 1.2 + Math.random() * 2.4,
-          wob: Math.random() * Math.PI * 2
+          x: s.x + (Math.random()-0.5) * SIZE, y: s.y,
+          vx: (Math.random()-0.5) * 0.7, vy: -(1.1 + Math.random() * 2.2),
+          life: 1, size: 1.5 + Math.random() * 2.6, wob: Math.random() * Math.PI * 2
         });
       }
     }
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
-      p.x += p.vx + Math.sin(t*6 + p.wob) * 0.35; // flame wander
+      p.x += p.vx + Math.sin(t*6 + p.wob) * 0.45;
       p.y += p.vy;
-      p.vy *= 1.01;      // accelerate upward like real convection
-      p.life -= 0.016;
+      p.vy *= 1.012;
+      p.life -= 0.024;
       if (p.life <= 0 || p.y < -10) parts.splice(i, 1);
     }
   }
 
-  function draw(time) {
+  function draw() {
     ctx.clearRect(0, 0, W, H);
-    const t = time * 0.001;
+    ctx.drawImage(cold, 0, 0, W, H);
 
-    // pass 1: the scale field
+    // repaint only burning scales
+    ctx.strokeStyle = 'rgba(11,5,3,.55)';
+    ctx.lineWidth = 1.5;
     for (const s of scales) {
-      const flicker = reduced ? 0.12 : 0.10 + 0.12 * Math.sin(t*1.4 + s.phase) * Math.sin(t*2.3 + s.x*0.02);
-      const glow = Math.min(1, s.heat + flicker);
-
-      let col = mix([11,5,3], s.base, 0.34 + glow * 0.5);
+      if (s.heat < 0.04) continue;
+      let col = mix([11,5,3], s.base, 0.34 + Math.min(1, s.heat + 0.12) * 0.5);
       col = mix(col, goldHot, s.heat * 0.8);
-      if (s.heat > 0.75) col = mix(col, whiteHot, (s.heat - 0.75) * 3.2); // white-hot core
-
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, SIZE * (1 + s.heat * 0.14), Math.PI, 0);
-      ctx.lineTo(s.x + SIZE, s.y + ROW_STEP);
-      ctx.lineTo(s.x - SIZE, s.y + ROW_STEP);
-      ctx.closePath();
+      if (s.heat > 0.75) col = mix(col, whiteHot, (s.heat - 0.75) * 3.2);
+      scalePath(ctx, s, 1 + s.heat * 0.14);
       ctx.fillStyle = `rgb(${col[0]|0},${col[1]|0},${col[2]|0})`;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(11,5,3,.55)';
-      ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
-    // pass 2: additive flame light over anything burning
+    // additive flame light + embers via cached sprites
     ctx.globalCompositeOperation = 'lighter';
     for (const s of scales) {
       if (s.heat < 0.16) continue;
-      const h = s.heat;
-      const stretch = 1 + h * 1.6; // flames reach upward, not outward
-      const r = SIZE * (1.4 + h * 2.2);
-      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-      const a = h * 0.32;
-      g.addColorStop(0, `rgba(255,190,80,${a})`);
-      g.addColorStop(0.5, `rgba(255,80,20,${a*0.55})`);
-      g.addColorStop(1, 'rgba(255,40,10,0)');
-      ctx.save();
-      ctx.translate(s.x, s.y - SIZE * h);   // licks bias upward
-      ctx.scale(1, stretch);
-      ctx.translate(-s.x, -s.y);
-      ctx.fillStyle = g;
-      ctx.fillRect(s.x - r, s.y - r, r*2, r*2);
-      ctx.restore();
+      const r = SIZE * (1.6 + s.heat * 2.4);
+      const ry = r * (1 + s.heat * 1.4);          // flames stretch upward
+      ctx.globalAlpha = s.heat;
+      ctx.drawImage(glowSprite, s.x - r, s.y - ry - SIZE * s.heat, r * 2, ry * 2);
     }
-
-    // pass 3: rising embers
     for (const p of parts) {
-      const a = p.life * 0.9;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size*3);
-      g.addColorStop(0, `rgba(255,240,190,${a})`);
-      g.addColorStop(0.4, `rgba(255,150,40,${a*0.7})`);
-      g.addColorStop(1, 'rgba(255,60,10,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(p.x - p.size*3, p.y - p.size*3, p.size*6, p.size*6);
+      ctx.globalAlpha = p.life;
+      const r = p.size * 3;
+      ctx.drawImage(emberSprite, p.x - r, p.y - r, r * 2, r * 2);
     }
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  function loop(t) { update(t); draw(t); requestAnimationFrame(loop); }
+  function loop(t) {
+    requestAnimationFrame(loop);
+    if (!running) { lastT = t; return; }
+    if (t - lastT < FRAME - 1) return;          // 30fps cap
+    lastT = t;
+    update(t);
+    draw();
+  }
 
   hero.addEventListener('pointermove', e => {
     const rect = canvas.getBoundingClientRect();
@@ -721,9 +742,18 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
   });
   hero.addEventListener('pointerleave', () => { mx = my = -9999; });
 
+  // stop burning CPU when the hero is off-screen or the tab is hidden
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(en => { running = en[0].isIntersecting; }).observe(hero);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) running = false;
+    else if (!('IntersectionObserver' in window)) running = true;
+  });
+
   addEventListener('resize', build);
   build();
-  if (reduced) { update(0); draw(0); } else requestAnimationFrame(loop);
+  if (reduced) { draw(); } else requestAnimationFrame(loop);
 })();
 
 /* ============ Carousel ============ */
@@ -760,13 +790,13 @@ function parseCSV(text) {
       if (ch === '"') { if (text[i+1] === '"') { field += '"'; i++; } else inQ = false; }
       else field += ch;
     } else if (ch === '"') inQ = true;
-    else if (ch === ',') { rows.at(-1).push(field); field = ''; }
+    else if (ch === ',') { rows[rows.length-1].push(field); field = ''; }
     else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i+1] === '\n') i++;
-      rows.at(-1).push(field); field = ''; rows.push([]);
+      rows[rows.length-1].push(field); field = ''; rows.push([]);
     } else field += ch;
   }
-  rows.at(-1).push(field);
+  rows[rows.length-1].push(field);
   return rows.filter(r => r.some(c => c.trim() !== ''));
 }
 
