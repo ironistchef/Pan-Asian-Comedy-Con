@@ -516,3 +516,6 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
    No grayscale, no fire-duotone overlay — faces and logos stay true. */
 .page-people .card-img img{filter:none}
 .page-people .card-img::before{content:none}
+
+/* people page: neutral backdrop behind real photos (covers transparent PNGs) */
+.page-people .card-img.has-photo{background:var(--char-2)}
