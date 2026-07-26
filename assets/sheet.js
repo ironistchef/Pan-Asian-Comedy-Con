@@ -7,7 +7,10 @@
    Loose "Key | Value" rows anywhere become site copy config.
 
    Recognized tables and their columns (order doesn't matter):
-     Schedule Table:   Type, Day, T Start, T End, Venue, Name, Description, Image Link
+     Schedule Table:   Type, Day, T Start, T End, Venue, Name, Description, Image Link,
+                       Is Feature, Ticket Link
+                       (Is Feature: TRUE / yes / x marks the event for the homepage carousel;
+                        Ticket Link: Eventbrite URL for that event's Tickets button)
      Teams Table:      Name, Description, Image Link
      Headliners Table: Name, Description, Image Link
      Standup Table:    Name, Description, Image Link
@@ -95,9 +98,15 @@ function eventCard(ev, tintPrefix, i) {
       <div class="card-body">
         <h3>${esc(ev.name)}</h3>
         <p>${esc(ev.desc)}</p>
-        <a class="card-link" href="#">Tickets <span class="arr">\u2192</span></a>
+        ${ticketLink(ev.tick, 'Tickets')}
       </div>
     </article>`;
+}
+
+function ticketLink(url, label) {
+  return url && /^https?:\/\//i.test(url)
+    ? `<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener">${label} <span class="arr">\u2192</span></a>`
+    : `<a class="card-link" href="index.html#passes">${label} <span class="arr">\u2192</span></a>`;
 }
 
 function personCard(p, i) {
@@ -161,8 +170,40 @@ fetch(SHEET_URL)
         type: g(r, 'type'), day: g(r, 'day'),
         start: g(r, 't start'), end: g(r, 't end'),
         venue: g(r, 'venue'), name: g(r, 'name'),
-        desc: g(r, 'description'), img: g(r, 'image link')
+        desc: g(r, 'description'), img: g(r, 'image link'),
+        feat: /^(true|yes|y|x|1|\u2713)$/i.test(g(r, 'is feature')),
+        tick: g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
       })).filter(e => /^(show|workshop|panel)$/i.test(e.type));
+
+      // ---- featured carousel from "Is Feature" column ----
+      const carEl = document.getElementById('carousel');
+      const featured = events.filter(e => e.feat);
+      if (carEl && featured.length) {
+        const arts = ['art-a', 'art-b', 'art-c'];
+        carEl.innerHTML = featured.map((e, i) => {
+          const img = imgTag(e.img);
+          const badges = [
+            e.day && `${esc(e.day)}${e.start ? ' \u00b7 ' + esc(e.start) : ''}`,
+            e.venue && esc(e.venue),
+            e.type && esc(e.type)
+          ].filter(Boolean)
+           .map((b, j) => `<span class="badge${j === 0 && e.day ? ' fill' : ''}">${b}</span>`)
+           .join('');
+          return `
+          <article class="slide">
+            <div class="slide-art ${arts[i % 3]}"${img ? '' : ` data-glyph="${GLYPHS[i % GLYPHS.length]}"`}>${img}</div>
+            <div class="slide-body">
+              <div class="badges">${badges}</div>
+              <h3>${esc(e.name)}</h3>
+              <p>${esc(e.desc)}</p>
+              ${ticketLink(e.tick, 'Get tickets')}
+            </div>
+          </article>`;
+        }).join('');
+        carEl.scrollLeft = 0;
+        const counter = document.getElementById('counter');
+        if (counter) counter.textContent = '01 / ' + String(featured.length).padStart(2, '0');
+      }
 
       const showsEl = document.getElementById('shows-grid');
       if (showsEl) {
@@ -190,11 +231,16 @@ fetch(SHEET_URL)
                 <div class="sched-time">${esc(e.start)}${e.end ? '\u2013' + esc(e.end) : ''}</div>
                 <div class="sched-info">
                   <div class="sched-name">${esc(e.name)}</div>
+                  <div class="sched-pills">
+                    ${e.venue ? `<span class="pill">${esc(e.venue)}</span>` : ''}
+                    <span class="pill">${esc(e.type)}</span>
+                  </div>
                   <p>${esc(e.desc)}</p>
                 </div>
-                <div class="sched-meta">
-                  ${e.venue ? `<span class="badge">${esc(e.venue)}</span>` : ''}
-                  <span class="badge">${esc(e.type)}</span>
+                <div class="sched-cta">
+                  ${e.tick && /^https?:\/\//i.test(e.tick)
+                    ? `<a class="sched-btn" href="${esc(e.tick)}" target="_blank" rel="noopener">Tickets</a>`
+                    : ''}
                 </div>
               </div>`).join('')}
           </div>`).join('');
