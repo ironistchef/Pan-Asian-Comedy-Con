@@ -169,7 +169,7 @@ function personCard(p, i) {
   const glyph = img ? '' : `<span class="glyph">${GLYPHS[i % GLYPHS.length]}</span>`;
   return `
     <article class="card person">
-      <div class="card-img t-work-${(i % 3) + 1}">${img}${glyph}</div>
+      <div class="card-img t-work-${(i % 3) + 1}${img ? ' has-photo' : ''}">${img}${glyph}</div>
       <div class="card-body">
         <h3>${esc(p.name)}</h3>
         <p>${esc(p.desc)}</p>
