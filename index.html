@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pan Asian Comedy Con</title>
+<meta name="description" content="Improv, workshops, and shows. NYC. 2027 — Year of the Fire Goat.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="#top">
+    <span class="brand-mark" aria-hidden="true">羊</span>
+    <span class="brand-name">Pan Asian Comedy Con</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#workshops">Workshops</a></li>
+    <li><a href="#passes">Passes</a></li>
+    <li><a href="#shows">Shows</a></li>
+    <li><a href="schedule.html">Schedule</a></li>
+    <li><a href="people.html">People</a></li>
+  </ul>
+</nav>
+
+<header class="hero" id="top">
+  <canvas id="scales" aria-hidden="true"></canvas>
+  <div class="hero-inner">
+    <span class="eyebrow">2027 · Year of the Fire Goat</span>
+    <h1>Pan Asian<br><span class="hot">Comedy Con</span></h1>
+    <p>Improv made by everyone, for everyone. Workshops, house teams, and shows that burn a little brighter.</p>
+    <a class="hero-cta" href="#shows">See What's On</a>
+  </div>
+</header>
+
+<!-- ===================== FEATURED ===================== -->
+<section class="section" aria-label="Featured">
+  <div class="section-head">
+    <h2>Featured</h2>
+    <span class="kicker">This season</span>
+  </div>
+
+  <div class="carousel-wrap">
+    <div class="carousel" id="carousel">
+      <article class="slide">
+        <div class="slide-art art-a" data-glyph="火"></div>
+        <div class="slide-body">
+          <div class="badges"><span class="badge fill">Selling fast</span><span class="badge">Mainstage</span></div>
+          <h3>The Fire Goat Revue</h3>
+          <p>Our flagship variety night — house teams, guest monologists, and one act nobody will explain in advance.</p>
+          <a class="card-link" href="#shows">Get tickets <span class="arr">→</span></a>
+        </div>
+      </article>
+      <article class="slide">
+        <div class="slide-art art-b" data-glyph="初"></div>
+        <div class="slide-body">
+          <div class="badges"><span class="badge">All levels</span><span class="badge">8 weeks</span></div>
+          <h3>Intro to Longform</h3>
+          <p>No experience needed. Learn scene work, agreement, and how to find the game — then perform on our stage.</p>
+          <a class="card-link" href="#workshops">Learn more <span class="arr">→</span></a>
+        </div>
+      </article>
+      <article class="slide">
+        <div class="slide-art art-c" data-glyph="季"></div>
+        <div class="slide-body">
+          <div class="badges"><span class="badge fill">Best value</span><span class="badge">Members</span></div>
+          <h3>Season Pass</h3>
+          <p>Every show, all season, one price. Skip the line and bring a friend to opening nights.</p>
+          <a class="card-link" href="#passes">See passes <span class="arr">→</span></a>
+        </div>
+      </article>
+    </div>
+    <div class="carousel-controls">
+      <span class="carousel-counter" id="counter">01 / 03</span>
+      <button class="c-btn" id="prev" aria-label="Previous slide">←</button>
+      <button class="c-btn" id="next" aria-label="Next slide">→</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== WORKSHOPS ===================== -->
+<section class="section" id="workshops">
+  <div class="section-head">
+    <h2>Workshops</h2>
+    <span class="kicker">Learn the craft</span>
+  </div>
+  <div class="grid" id="workshops-grid">
+    <article class="card">
+      <div class="card-img t-work-1"><span class="glyph">壱</span><div class="badges"><span class="badge">All levels</span></div></div>
+      <div class="card-body">
+        <h3>Intro to Longform</h3>
+        <p>Eight weeks from zero to your first Harold. Scene basics, listening, and saying yes like you mean it.</p>
+        <a class="card-link" href="#">Details <span class="arr">→</span></a>
+      </div>
+    </article>
+    <article class="card">
+      <div class="card-img t-work-2"><span class="glyph">弐</span><div class="badges"><span class="badge fill">New</span><span class="badge">Level 2</span></div></div>
+      <div class="card-body">
+        <h3>Scene Work Intensive</h3>
+        <p>Slow scenes, real emotion, second beats. For grads of Intro or performers with equivalent experience.</p>
+        <a class="card-link" href="#">Details <span class="arr">→</span></a>
+      </div>
+    </article>
+    <article class="card">
+      <div class="card-img t-work-3"><span class="glyph">参</span><div class="badges"><span class="badge">Drop-in</span></div></div>
+      <div class="card-body">
+        <h3>Sunday Jam</h3>
+        <p>No signup, no pressure. Show up, get on a team, play. First-timers always welcome.</p>
+        <a class="card-link" href="#">Details <span class="arr">→</span></a>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ===================== PASSES ===================== -->
+<section class="section" id="passes">
+  <div class="section-head">
+    <h2>Passes</h2>
+    <span class="kicker">Ways in</span>
+  </div>
+  <div class="tickets">
+    <article class="ticket tk-silver">
+      <div class="tk-body">
+        <div class="tk-top"><span class="tk-tier">Silver</span><span class="tk-serial">№ 000132</span></div>
+        <h3>Single Show</h3>
+        <p>One night, one seat. Good for the curious and the dragged-along-by-a-friend.</p>
+        <a class="tk-link" href="#">Buy on Eventbrite <span class="arr">→</span></a>
+      </div>
+      <div class="tk-stub">
+        <span class="tk-admit">Admit One</span>
+        <div class="tk-barcode" aria-hidden="true"></div>
+      </div>
+    </article>
+
+    <article class="ticket tk-gold">
+      <span class="tk-flag">Best value</span>
+      <div class="tk-body">
+        <div class="tk-top"><span class="tk-tier">Gold</span><span class="tk-serial">№ 000027</span></div>
+        <h3>Season Pass</h3>
+        <p>Every mainstage and house team show through the season. Priority seating, plus-one on opening nights.</p>
+        <a class="tk-link" href="#">Buy on Eventbrite <span class="arr">→</span></a>
+      </div>
+      <div class="tk-stub">
+        <span class="tk-admit">All Season</span>
+        <div class="tk-barcode" aria-hidden="true"></div>
+      </div>
+    </article>
+
+    <article class="ticket tk-fire">
+      <div class="tk-body">
+        <div class="tk-top"><span class="tk-tier">Fire</span><span class="tk-serial">№ 000008</span></div>
+        <h3>Workshop Bundle</h3>
+        <p>Any two workshops plus free entry to student showcases. Valid for one year.</p>
+        <a class="tk-link" href="#">Buy on Eventbrite <span class="arr">→</span></a>
+      </div>
+      <div class="tk-stub">
+        <span class="tk-admit">Fire Goat</span>
+        <div class="tk-barcode" aria-hidden="true"></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ===================== SHOWS ===================== -->
+<section class="section" id="shows">
+  <div class="section-head">
+    <h2>Shows</h2>
+    <span class="kicker">On stage</span>
+  </div>
+  <div class="grid" id="shows-grid">
+    <article class="card">
+      <div class="card-img t-show-1"><span class="glyph">夜</span><div class="badges"><span class="badge">Fri</span><span class="badge fill">Selling fast</span></div></div>
+      <div class="card-body">
+        <h3>The Fire Goat Revue</h3>
+        <p>Our flagship variety night. House teams, guests, chaos with excellent posture.</p>
+        <a class="card-link" href="#">Tickets <span class="arr">→</span></a>
+      </div>
+    </article>
+    <article class="card">
+      <div class="card-img t-show-2"><span class="glyph">組</span><div class="badges"><span class="badge">Sat</span></div></div>
+      <div class="card-body">
+        <h3>House Team Night</h3>
+        <p>Two teams, two half-hour sets, zero plans. The heart of the club, every Saturday.</p>
+        <a class="card-link" href="#">Tickets <span class="arr">→</span></a>
+      </div>
+    </article>
+    <article class="card">
+      <div class="card-img t-show-3"><span class="glyph">新</span><div class="badges"><span class="badge">Free</span></div></div>
+      <div class="card-body">
+        <h3>Student Showcase</h3>
+        <p>Fresh grads take the stage for the first time. Loud crowds encouraged.</p>
+        <a class="card-link" href="#">Tickets <span class="arr">→</span></a>
+      </div>
+    </article>
+  </div>
+</section>
+
+<footer>
+  <span class="mark">Pan Asian Comedy Con</span>
+  <span>© 2027 Pan Asian Comedy Con · New York</span>
+</footer>
+
+<script src="assets/fire.js"></script>
+<script src="assets/sheet.js"></script>
+<script>
+/* ============ Carousel ============ */
+const track = document.getElementById('carousel');
+const counter = document.getElementById('counter');
+const slideCount = () => track.children.length;
+const pad = n => String(n).padStart(2,'0');
+
+const slideWidth = () => track.firstElementChild.getBoundingClientRect().width + 20;
+const current = () => Math.round(track.scrollLeft / slideWidth());
+
+document.getElementById('next').addEventListener('click', () => {
+  track.scrollTo({left: Math.min(current()+1, slideCount()-1) * slideWidth(), behavior:'smooth'});
+});
+document.getElementById('prev').addEventListener('click', () => {
+  track.scrollTo({left: Math.max(current()-1, 0) * slideWidth(), behavior:'smooth'});
+});
+track.addEventListener('scroll', () => {
+  counter.textContent = `${pad(current()+1)} / ${pad(slideCount())}`;
+}, {passive:true});
+</script>
+</body>
+</html>
