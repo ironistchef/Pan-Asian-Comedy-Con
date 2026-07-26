@@ -201,11 +201,15 @@ function applyOverlay(config) {
                '.hero .eyebrow,.page-hero .eyebrow,.hero p,.hero-cta,' +
                '.card-link,.sched-btn,.badge,.pill,.brand-name,' +
                '.page-hero h1,.sched-day-title,.tk-admit,.tk-tier';
+  const navAll = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
   document.querySelectorAll(sels).forEach(el => {
     const arr = el.querySelector('.arr');
     const txt = arr ? (el.firstChild ? el.firstChild.nodeValue : '') : el.textContent;
     const v = map[(txt || '').trim().toLowerCase()];
     if (!v) return;
+    // a rename that would duplicate another nav label is skipped
+    if (navAll.indexOf(el) !== -1 && navAll.some(b =>
+        b !== el && b.textContent.trim().toLowerCase() === v.trim().toLowerCase())) return;
     if (arr && el.firstChild) el.firstChild.nodeValue = v + ' ';
     else el.textContent = v;
   });
@@ -304,9 +308,12 @@ Promise.all(TABS.map(tab => {
   setText('.hero p', config['Description 1']);
   setText('.hero-cta', config['Main Button Text']);
   setText('.brand-name', config['Logo Text']);
-  document.querySelectorAll('.nav-links a').forEach((a, i) => {
+  const navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
+  const navDupe = (self, v) => navLinks.some(b =>
+    b !== self && b.textContent.trim().toLowerCase() === v.trim().toLowerCase());
+  navLinks.forEach((a, i) => {
     const v = config[`Button ${i + 1}`];
-    if (v) a.textContent = v;
+    if (v && !navDupe(a, v)) a.textContent = v;   // never two nav links with the same label
   });
 
   // ---- events -> home cards, carousel, timetable ----
