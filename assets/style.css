@@ -481,3 +481,33 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
   font-size:19px;letter-spacing:.06em;
 }
 .thanks-desc{display:block;color:var(--paper-dim);font-size:13px;margin-top:2px}
+
+/* ---------- Mobile nav: hamburger + dropdown ---------- */
+.nav-toggle{
+  display:none;flex-direction:column;justify-content:center;align-items:center;gap:5px;
+  width:44px;height:40px;background:none;border:1px solid var(--line);cursor:pointer;
+}
+.nav-toggle span{
+  display:block;width:20px;height:2px;background:var(--molten);
+  transition:transform .2s,opacity .2s;
+}
+.nav.open .nav-toggle span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.nav.open .nav-toggle span:nth-child(2){opacity:0}
+.nav.open .nav-toggle span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+@media (max-width:760px){
+  .nav-toggle{display:flex}
+  .nav-links{
+    display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;gap:0;padding:6px 0 12px;
+    background:rgba(11,5,3,.97);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .nav.open .nav-links{display:flex}
+  .nav-links li{width:100%}
+  .nav-links a{
+    display:block;padding:14px 26px;
+    font-size:18px;letter-spacing:.1em;
+  }
+  .nav-links a::before{inset:0}
+  .brand-name{display:inline} /* room for it now that links are tucked away */
+}
