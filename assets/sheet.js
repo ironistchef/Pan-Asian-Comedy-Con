@@ -431,3 +431,19 @@ Promise.all(TABS.map(tab => {
 })
 .catch(err => console.warn('Sheet load failed \u2014 keeping placeholder content:', err));
 })();
+
+
+/* ---- mobile nav toggle ---- */
+(() => {
+  const nav = document.querySelector('.nav');
+  const btn = document.querySelector('.nav-toggle');
+  if (!nav || !btn) return;
+  btn.addEventListener('click', () => {
+    const open = nav.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  nav.querySelectorAll('.nav-links a').forEach(a => a.addEventListener('click', () => {
+    nav.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }));
+})();
