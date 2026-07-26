@@ -1,35 +1,27 @@
 /* Pan Asian Comedy Con — shared sheet loader.
    Reads the published Google Sheet and fills whatever sections exist on this page.
 
-   STRUCTURE
-   - Sections are marked by a row whose only filled cell is a recognized name,
-     optionally followed by "Table" or "Tab" (e.g. "Schedule Table", "People",
-     "Overlay Tab"). Recognized: schedule, people, teams, headliners, standup(s),
-     organizers, sponsors, overlay, config.
-   - Most sections: next row is the header row, then data rows (Name required).
-   - Overlay + Config sections: simple Key | Value rows, no header needed.
-   - Loose Key | Value rows outside any section also become config.
-   - A cell containing exactly "N/A" is treated as empty (ignored).
+   HOW THE SHEET WORKS — one table, the Type column routes every row:
+     Show / Workshop / Panel  -> events (schedule, home cards, carousel)
+     Overlay1 (any "Overlay…") -> site verbiage: Name = the element to change,
+                                  Description = the wording for it.
+                                  Named elements: Subtitle 1, Title 1 Line 1,
+                                  Title 1 Line 2, Description 1, Main Button Text,
+                                  Logo Text, Button 1..5 — or any visible label
+                                  matched by its current text (e.g. Name "Workshops",
+                                  Description "Classes" renames that heading + nav link).
+     People / Organizer       -> Organizers section (people page)
+     Team / Headliner / Standup -> those sections (schedule page)
+     Sponsor                  -> sponsor logo tiles (Name, Image Link = logo,
+                                  Purchase link = website)
+     N/A or anything else     -> ignored
 
-   COLUMNS
-     Schedule: Type, Day, T Start, T End, Venue, Name, Description, Image Link,
-               Featured (TRUE/yes/x -> homepage carousel), Purchase link (Eventbrite URL)
-     People:   Name, Bio (or Description), Image Link, Role
-               (Role sends the row to a page section: Organizer, Team, Headliner,
-                Standup, Sponsor. No role = Organizer.)
-     Sponsors: Name, Logo Link, Website
+   Event columns: Type, Day, T Start, T End, Venue, Name, Description, Image Link,
+                  Featured (Yes/TRUE/x -> homepage carousel), Purchase link.
+   A cell containing exactly "N/A" is treated as empty anywhere.
 
-   OVERLAY
-     Key | Value pairs that rewrite site text. Two kinds of keys work:
-     1) The hero/nav keys: Subtitle 1, Title 1 Line 1, Title 1 Line 2,
-        Description 1, Main Button Text, Logo Text, Button 1..5
-     2) Any visible label, matched by its current text: e.g. key "Workshops"
-        with value "Classes" renames the section heading and nav link;
-        key "Show" relabels that badge everywhere.
-
-   MULTIPLE TABS
-     The published CSV link only exports the FIRST tab. If People/Overlay live
-     on other tabs, list their gid numbers below (from the tab's URL: #gid=...).
+   Named sections ("People", "Overlay Tab", "Sponsors Table"…) and extra tabs
+   (fill in gid numbers in TABS below) are also supported.
 */
 (() => {
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFTalMTPLQlTSHy2Zh0tF4JK9ZTJM5YxLOLBO3I98seINE4sD12rlT2Nw03jsPjLJnWjzBIcOVaAWV/pub?output=csv';
@@ -102,7 +94,7 @@ function segment(rows) {
       const nameIdx = t.col['name'];
       if (nameIdx !== undefined && cells[nameIdx]) { t.rows.push(cells); continue; }
     }
-    if (cells[0] && cells[1] && !cells[2]) config[cells[0]] = cells[1];
+    // NOTE: no loose key/value fallback — verbiage comes from Overlay rows/sections only
   }
   return { tables, config };
 }
@@ -211,6 +203,38 @@ Promise.all(TABS.map(tab => {
   if (!rows.length) throw new Error('No sheet data');
   const { tables, config } = segment(rows);
 
+  // ---- route the main table's rows by Type ----
+  const events = [];
+  const typed = { 'organizers-grid': [], 'teams-grid': [], 'headliners-grid': [], 'standup-grid': [] };
+  const typedSponsors = [];
+  const sched = tables['schedule'];
+  if (sched && sched.col && sched.rows.length) {
+    const g = getter(sched);
+    for (const r of sched.rows) {
+      const type = g(r, 'type');
+      const base = {
+        name: g(r, 'name'),
+        desc: g(r, 'description') || g(r, 'bio'),
+        img: g(r, 'image link') || g(r, 'logo link'),
+        tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
+      };
+      if (/^(show|workshop|panel)$/i.test(type)) {
+        events.push(Object.assign(base, {
+          type: type, day: g(r, 'day'), start: g(r, 't start'), end: g(r, 't end'),
+          venue: g(r, 'venue'),
+          feat: TRUTHY.test(g(r, 'featured') || g(r, 'is feature'))
+        }));
+      }
+      else if (/^overlay/i.test(type)) { if (base.name && base.desc) config[base.name] = base.desc; }
+      else if (/^(people|organizers?)$/i.test(type)) typed['organizers-grid'].push(base);
+      else if (/^teams?$/i.test(type)) typed['teams-grid'].push(base);
+      else if (/^headliners?$/i.test(type)) typed['headliners-grid'].push(base);
+      else if (/^stand.?ups?$/i.test(type)) typed['standup-grid'].push(base);
+      else if (/^sponsors?$/i.test(type)) typedSponsors.push(base);
+      // anything else (blank after N/A, unknown types) is ignored
+    }
+  }
+
   // ---- hero/nav copy ----
   const setText = (sel, val) => {
     const el = document.querySelector(sel);
@@ -230,19 +254,8 @@ Promise.all(TABS.map(tab => {
     if (v) a.textContent = v;
   });
 
-  // ---- schedule -> home cards, carousel, timetable ----
-  const sched = tables['schedule'];
-  if (sched && sched.col && sched.rows.length) {
-    const g = getter(sched);
-    const events = sched.rows.map(r => ({
-      type: g(r, 'type'), day: g(r, 'day'),
-      start: g(r, 't start'), end: g(r, 't end'),
-      venue: g(r, 'venue'), name: g(r, 'name'),
-      desc: g(r, 'description'), img: g(r, 'image link'),
-      feat: TRUTHY.test(g(r, 'featured') || g(r, 'is feature')),
-      tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
-    })).filter(e => /^(show|workshop|panel)$/i.test(e.type));
-
+  // ---- events -> home cards, carousel, timetable ----
+  if (events.length) {
     const carEl = document.getElementById('carousel');
     const featured = events.filter(e => e.feat);
     if (carEl && featured.length) {
@@ -284,7 +297,7 @@ Promise.all(TABS.map(tab => {
     }
 
     const schedEl = document.getElementById('schedule-list');
-    if (schedEl && events.length) {
+    if (schedEl) {
       const days = {};
       for (const e of events) {
         const d = e.day || 'Day TBD';
@@ -314,7 +327,18 @@ Promise.all(TABS.map(tab => {
     }
   }
 
+  // ---- Type-routed people + sponsors ----
+  const fillGridTyped = (gridId, list) => {
+    const el = document.getElementById(gridId);
+    if (el && list.length) el.innerHTML = list.map((p, i) => personCard(p, i)).join('');
+  };
+  for (const gridId in typed) fillGridTyped(gridId, typed[gridId]);
+  const spTypedEl = document.getElementById('sponsors-grid');
+  if (spTypedEl && typedSponsors.length)
+    spTypedEl.innerHTML = typedSponsors.map(s => sponsorTile({ name: s.name, img: s.img, link: s.tick })).join('');
+
   // ---- People table with Role routing (plus legacy per-group tables) ----
+
   const fillGrid = (gridId, list) => {
     const el = document.getElementById(gridId);
     if (el && list.length) el.innerHTML = list.map((p, i) => personCard(p, i)).join('');
