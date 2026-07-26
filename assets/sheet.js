@@ -1,28 +1,52 @@
 /* Pan Asian Comedy Con — shared sheet loader.
    Reads the published Google Sheet and fills whatever sections exist on this page.
 
-   Sheet format: tables are marked by a row whose only filled cell is
-   "<Name> Table" (e.g. "Schedule Table", "Teams Table"), followed by a
-   header row, then data rows. A data row needs its Name cell filled.
-   Loose "Key | Value" rows anywhere become site copy config.
+   STRUCTURE
+   - Sections are marked by a row whose only filled cell is a recognized name,
+     optionally followed by "Table" or "Tab" (e.g. "Schedule Table", "People",
+     "Overlay Tab"). Recognized: schedule, people, teams, headliners, standup(s),
+     organizers, sponsors, overlay, config.
+   - Most sections: next row is the header row, then data rows (Name required).
+   - Overlay + Config sections: simple Key | Value rows, no header needed.
+   - Loose Key | Value rows outside any section also become config.
+   - A cell containing exactly "N/A" is treated as empty (ignored).
 
-   Recognized tables and their columns (order doesn't matter):
-     Schedule Table:   Type, Day, T Start, T End, Venue, Name, Description, Image Link,
-                       Featured, Purchase link
-                       (Featured: TRUE / yes / x toggles the event into the homepage carousel;
-                        Purchase link: Eventbrite URL for that event's buy button.
-                        Also accepted: "Is Feature", "Ticket Link", "Eventbrite", "Link")
-     Teams Table:      Name, Description, Image Link
-     Headliners Table: Name, Description, Image Link
-     Standup Table:    Name, Description, Image Link
-     Organizers Table: Name, Bio (or Description), Image Link
-     Sponsors Table:   Name, Logo Link, Website
+   COLUMNS
+     Schedule: Type, Day, T Start, T End, Venue, Name, Description, Image Link,
+               Featured (TRUE/yes/x -> homepage carousel), Purchase link (Eventbrite URL)
+     People:   Name, Bio (or Description), Image Link, Role
+               (Role sends the row to a page section: Organizer, Team, Headliner,
+                Standup, Sponsor. No role = Organizer.)
+     Sponsors: Name, Logo Link, Website
+
+   OVERLAY
+     Key | Value pairs that rewrite site text. Two kinds of keys work:
+     1) The hero/nav keys: Subtitle 1, Title 1 Line 1, Title 1 Line 2,
+        Description 1, Main Button Text, Logo Text, Button 1..5
+     2) Any visible label, matched by its current text: e.g. key "Workshops"
+        with value "Classes" renames the section heading and nav link;
+        key "Show" relabels that badge everywhere.
+
+   MULTIPLE TABS
+     The published CSV link only exports the FIRST tab. If People/Overlay live
+     on other tabs, list their gid numbers below (from the tab's URL: #gid=...).
 */
 (() => {
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFTalMTPLQlTSHy2Zh0tF4JK9ZTJM5YxLOLBO3I98seINE4sD12rlT2Nw03jsPjLJnWjzBIcOVaAWV/pub?output=csv';
 
+const TABS = [
+  { gid: null },                       // first tab
+  // { gid: '123456789', as: 'people' },   // <- fill in real gid numbers
+  // { gid: '987654321', as: 'overlay' },
+];
+
 const esc = s => String(s).replace(/[&<>"']/g,
   c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const SECTION_NAMES = /^(schedule|people|teams|headliners|standups?|organizers|sponsors|overlay|config)(\s+(table|tab))?$/i;
+const KV_SECTIONS = { overlay: 1, config: 1 };
+const TRUTHY = /^(true|yes|y|x|1|\u2713)$/i;
+const isUrl = u => /^https?:\/\//i.test(u || '');
 
 // quote-aware CSV parser (descriptions contain commas)
 function parseCSV(text) {
@@ -43,28 +67,38 @@ function parseCSV(text) {
   return rows.filter(r => r.some(c => c.trim() !== ''));
 }
 
-// split rows into named tables + loose key/value config
+// "N/A" anywhere means: pretend the cell is empty
+const clean = c => {
+  const v = (c || '').trim();
+  return /^n\/a$/i.test(v) ? '' : v;
+};
+
+// split rows into named tables (+ key/value config from kv sections and loose rows)
 function segment(rows) {
   const tables = {}, config = {};
   let cur = null;
   for (const r of rows) {
-    const cells = r.map(c => (c || '').trim());
+    const cells = r.map(clean);
     const filled = cells.filter(Boolean);
 
-    if (filled.length === 1 && /table$/i.test(filled[0])) {
-      const name = filled[0].toLowerCase().replace(/\s*table$/, '').trim();
+    if (filled.length === 1 && SECTION_NAMES.test(filled[0])) {
+      const name = filled[0].toLowerCase().replace(/\s+(table|tab)$/, '').trim();
       cur = name;
-      tables[name] = { col: null, rows: [] };
+      if (!tables[name]) tables[name] = { col: null, rows: [], kv: !!KV_SECTIONS[name] };
       continue;
     }
-    if (cur && !tables[cur].col) {           // header row of current table
+    const t = cur && tables[cur];
+    if (t && t.kv) {                               // overlay/config: Key | Value pairs
+      if (cells[0] && cells[1]) config[cells[0]] = cells[1];
+      continue;
+    }
+    if (t && !t.col) {                             // header row of current table
       const col = {};
       cells.forEach((h, i) => { if (h) col[h.toLowerCase()] = i; });
-      tables[cur].col = col;
+      t.col = col;
       continue;
     }
-    if (cur) {
-      const t = tables[cur];
+    if (t) {
       const nameIdx = t.col['name'];
       if (nameIdx !== undefined && cells[nameIdx]) { t.rows.push(cells); continue; }
     }
@@ -73,19 +107,25 @@ function segment(rows) {
   return { tables, config };
 }
 
-const getter = t => (row, key) => t.col[key] === undefined ? '' : (row[t.col[key]] || '').trim();
+const getter = t => (row, key) => t.col[key] === undefined ? '' : clean(row[t.col[key]]);
 
-const GLYPHS = ['火','夜','組','新','壱','弐','参','季'];
+const GLYPHS = ['\u706b','\u591c','\u7d44','\u65b0','\u58f1','\u5f10','\u53c2','\u5b63'];
 
 function imgTag(url, alt) {
-  return url && /^https?:\/\//i.test(url)
+  return isUrl(url)
     ? `<img src="${esc(url)}" alt="${esc(alt || '')}" loading="lazy">`
     : '';
 }
 
+function ticketLink(url, label) {
+  return isUrl(url)
+    ? `<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener">${label} <span class="arr">\u2192</span></a>`
+    : `<a class="card-link" href="index.html#passes">${label} <span class="arr">\u2192</span></a>`;
+}
+
 function eventCard(ev, tintPrefix, i) {
   const badges = [
-    ev.day && `${esc(ev.day)}${ev.start ? ' · ' + esc(ev.start) : ''}`,
+    ev.day && `${esc(ev.day)}${ev.start ? ' \u00b7 ' + esc(ev.start) : ''}`,
     ev.venue && esc(ev.venue),
     ev.type && esc(ev.type)
   ].filter(Boolean)
@@ -104,12 +144,6 @@ function eventCard(ev, tintPrefix, i) {
     </article>`;
 }
 
-function ticketLink(url, label) {
-  return url && /^https?:\/\//i.test(url)
-    ? `<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener">${label} <span class="arr">\u2192</span></a>`
-    : `<a class="card-link" href="index.html#passes">${label} <span class="arr">\u2192</span></a>`;
-}
-
 function personCard(p, i) {
   const img = imgTag(p.img, p.name);
   const glyph = img ? '' : `<span class="glyph">${GLYPHS[i % GLYPHS.length]}</span>`;
@@ -126,12 +160,12 @@ function personCard(p, i) {
 function sponsorTile(s) {
   const inner = imgTag(s.img, s.name) || `<span>${esc(s.name)}</span>`;
   const tile = `<div class="sponsor">${inner}</div>`;
-  return s.link && /^https?:\/\//i.test(s.link)
+  return isUrl(s.link)
     ? `<a class="sponsor-link" href="${esc(s.link)}" target="_blank" rel="noopener">${tile}</a>`
     : tile;
 }
 
-function timeVal(t) { // "2:00 PM" -> minutes since midnight, unparseable last
+function timeVal(t) {
   const m = /(\d+):(\d+)\s*(AM|PM)/i.exec(t || '');
   if (!m) return 1e9;
   let h = (+m[1]) % 12;
@@ -139,142 +173,198 @@ function timeVal(t) { // "2:00 PM" -> minutes since midnight, unparseable last
   return h * 60 + (+m[2]);
 }
 
-fetch(SHEET_URL)
-  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-  .then(csv => {
-    const { tables, config } = segment(parseCSV(csv));
+// Overlay pass 2: rewrite any visible label whose text matches a key
+function applyOverlay(config) {
+  const map = {};
+  for (const k in config) map[k.trim().toLowerCase()] = config[k];
+  const sels = '.nav-links a,.section-head h2,.section-head .kicker,' +
+               '.hero .eyebrow,.page-hero .eyebrow,.hero p,.hero-cta,' +
+               '.card-link,.sched-btn,.badge,.pill,.brand-name,' +
+               '.page-hero h1,.sched-day-title,.tk-admit,.tk-tier';
+  document.querySelectorAll(sels).forEach(el => {
+    const arr = el.querySelector('.arr');
+    const txt = arr ? (el.firstChild ? el.firstChild.nodeValue : '') : el.textContent;
+    const v = map[(txt || '').trim().toLowerCase()];
+    if (!v) return;
+    if (arr && el.firstChild) el.firstChild.nodeValue = v + ' ';
+    else el.textContent = v;
+  });
+}
 
-    // ---- site copy from config rows (only elements present on this page) ----
-    const setText = (sel, val) => {
-      const el = document.querySelector(sel);
-      if (el && val) el.textContent = val;
-    };
-    setText('.hero .eyebrow', config['Subtitle 1']);
-    const h1 = document.querySelector('.hero h1');
-    if (h1 && (config['Title 1 Line 1'] || config['Title 1 Line 2'])) {
-      h1.innerHTML =
-        `${esc(config['Title 1 Line 1'] || 'Pan Asian')}<br><span class="hot">${esc(config['Title 1 Line 2'] || 'Comedy Con')}</span>`;
+// fetch every configured tab, concatenate rows
+Promise.all(TABS.map(tab => {
+  const url = SHEET_URL + (tab.gid ? `&gid=${tab.gid}&single=true` : '');
+  return fetch(url)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(txt => {
+      const rows = parseCSV(txt);
+      // a tagged tab with no section-title row gets one synthesized
+      if (tab.as && !(rows[0] && rows[0].filter(c => c.trim()).length === 1
+                      && SECTION_NAMES.test(rows[0].filter(c => c.trim())[0])))
+        rows.unshift([tab.as]);
+      return rows;
+    })
+    .catch(err => { console.warn('Tab failed', tab.gid || 'main', err); return []; });
+}))
+.then(rowSets => {
+  const rows = [].concat.apply([], rowSets);
+  if (!rows.length) throw new Error('No sheet data');
+  const { tables, config } = segment(rows);
+
+  // ---- hero/nav copy ----
+  const setText = (sel, val) => {
+    const el = document.querySelector(sel);
+    if (el && val) el.textContent = val;
+  };
+  setText('.hero .eyebrow', config['Subtitle 1']);
+  const h1 = document.querySelector('.hero h1');
+  if (h1 && (config['Title 1 Line 1'] || config['Title 1 Line 2'])) {
+    h1.innerHTML =
+      `${esc(config['Title 1 Line 1'] || 'Pan Asian')}<br><span class="hot">${esc(config['Title 1 Line 2'] || 'Comedy Con')}</span>`;
+  }
+  setText('.hero p', config['Description 1']);
+  setText('.hero-cta', config['Main Button Text']);
+  setText('.brand-name', config['Logo Text']);
+  document.querySelectorAll('.nav-links a').forEach((a, i) => {
+    const v = config[`Button ${i + 1}`];
+    if (v) a.textContent = v;
+  });
+
+  // ---- schedule -> home cards, carousel, timetable ----
+  const sched = tables['schedule'];
+  if (sched && sched.col && sched.rows.length) {
+    const g = getter(sched);
+    const events = sched.rows.map(r => ({
+      type: g(r, 'type'), day: g(r, 'day'),
+      start: g(r, 't start'), end: g(r, 't end'),
+      venue: g(r, 'venue'), name: g(r, 'name'),
+      desc: g(r, 'description'), img: g(r, 'image link'),
+      feat: TRUTHY.test(g(r, 'featured') || g(r, 'is feature')),
+      tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
+    })).filter(e => /^(show|workshop|panel)$/i.test(e.type));
+
+    const carEl = document.getElementById('carousel');
+    const featured = events.filter(e => e.feat);
+    if (carEl && featured.length) {
+      const arts = ['art-a', 'art-b', 'art-c'];
+      carEl.innerHTML = featured.map((e, i) => {
+        const img = imgTag(e.img);
+        const badges = [
+          e.day && `${esc(e.day)}${e.start ? ' \u00b7 ' + esc(e.start) : ''}`,
+          e.venue && esc(e.venue),
+          e.type && esc(e.type)
+        ].filter(Boolean)
+         .map((b, j) => `<span class="badge${j === 0 && e.day ? ' fill' : ''}">${b}</span>`)
+         .join('');
+        return `
+        <article class="slide">
+          <div class="slide-art ${arts[i % 3]}"${img ? '' : ` data-glyph="${GLYPHS[i % GLYPHS.length]}"`}>${img}</div>
+          <div class="slide-body">
+            <div class="badges">${badges}</div>
+            <h3>${esc(e.name)}</h3>
+            <p>${esc(e.desc)}</p>
+            ${ticketLink(e.tick, 'Get tickets')}
+          </div>
+        </article>`;
+      }).join('');
+      carEl.scrollLeft = 0;
+      const counter = document.getElementById('counter');
+      if (counter) counter.textContent = '01 / ' + String(featured.length).padStart(2, '0');
     }
-    setText('.hero p', config['Description 1']);
-    setText('.hero-cta', config['Main Button Text']);
-    setText('.brand-name', config['Logo Text']);
-    document.querySelectorAll('.nav-links a').forEach((a, i) => {
-      const v = config[`Button ${i + 1}`];
-      if (v) a.textContent = v;
-    });
 
-    // ---- schedule table drives home cards + full timetable ----
-    const sched = tables['schedule'];
-    if (sched && sched.col && sched.rows.length) {
-      const g = getter(sched);
-      const events = sched.rows.map(r => ({
-        type: g(r, 'type'), day: g(r, 'day'),
-        start: g(r, 't start'), end: g(r, 't end'),
-        venue: g(r, 'venue'), name: g(r, 'name'),
-        desc: g(r, 'description'), img: g(r, 'image link'),
-        feat: /^(true|yes|y|x|1|\u2713)$/i.test(g(r, 'featured') || g(r, 'is feature')),
-        tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
-      })).filter(e => /^(show|workshop|panel)$/i.test(e.type));
+    const showsEl = document.getElementById('shows-grid');
+    if (showsEl) {
+      const shows = events.filter(e => /^show$/i.test(e.type));
+      if (shows.length) showsEl.innerHTML = shows.map((e, i) => eventCard(e, 't-show-', i)).join('');
+    }
+    const worksEl = document.getElementById('workshops-grid');
+    if (worksEl) {
+      const works = events.filter(e => !/^show$/i.test(e.type));
+      if (works.length) worksEl.innerHTML = works.map((e, i) => eventCard(e, 't-work-', i)).join('');
+    }
 
-      // ---- featured carousel from "Is Feature" column ----
-      const carEl = document.getElementById('carousel');
-      const featured = events.filter(e => e.feat);
-      if (carEl && featured.length) {
-        const arts = ['art-a', 'art-b', 'art-c'];
-        carEl.innerHTML = featured.map((e, i) => {
-          const img = imgTag(e.img);
-          const badges = [
-            e.day && `${esc(e.day)}${e.start ? ' \u00b7 ' + esc(e.start) : ''}`,
-            e.venue && esc(e.venue),
-            e.type && esc(e.type)
-          ].filter(Boolean)
-           .map((b, j) => `<span class="badge${j === 0 && e.day ? ' fill' : ''}">${b}</span>`)
-           .join('');
-          return `
-          <article class="slide">
-            <div class="slide-art ${arts[i % 3]}"${img ? '' : ` data-glyph="${GLYPHS[i % GLYPHS.length]}"`}>${img}</div>
-            <div class="slide-body">
-              <div class="badges">${badges}</div>
-              <h3>${esc(e.name)}</h3>
-              <p>${esc(e.desc)}</p>
-              ${ticketLink(e.tick, 'Get tickets')}
-            </div>
-          </article>`;
-        }).join('');
-        carEl.scrollLeft = 0;
-        const counter = document.getElementById('counter');
-        if (counter) counter.textContent = '01 / ' + String(featured.length).padStart(2, '0');
+    const schedEl = document.getElementById('schedule-list');
+    if (schedEl && events.length) {
+      const days = {};
+      for (const e of events) {
+        const d = e.day || 'Day TBD';
+        (days[d] = days[d] || []).push(e);
       }
-
-      const showsEl = document.getElementById('shows-grid');
-      if (showsEl) {
-        const shows = events.filter(e => /^show$/i.test(e.type));
-        if (shows.length) showsEl.innerHTML = shows.map((e, i) => eventCard(e, 't-show-', i)).join('');
-      }
-      const worksEl = document.getElementById('workshops-grid');
-      if (worksEl) {
-        const works = events.filter(e => !/^show$/i.test(e.type));
-        if (works.length) worksEl.innerHTML = works.map((e, i) => eventCard(e, 't-work-', i)).join('');
-      }
-
-      const schedEl = document.getElementById('schedule-list');
-      if (schedEl && events.length) {
-        const days = {};
-        for (const e of events) {
-          const d = e.day || 'Day TBD';
-          (days[d] = days[d] || []).push(e);
-        }
-        schedEl.innerHTML = Object.keys(days).map(day => `
-          <div class="sched-day">
-            <h3 class="sched-day-title">${esc(day)}</h3>
-            ${days[day].sort((a, b) => timeVal(a.start) - timeVal(b.start)).map(e => `
-              <div class="sched-row">
-                <div class="sched-time">${esc(e.start)}${e.end ? '\u2013' + esc(e.end) : ''}</div>
-                <div class="sched-info">
-                  <div class="sched-name">${esc(e.name)}</div>
-                  <div class="sched-pills">
-                    ${e.venue ? `<span class="pill">${esc(e.venue)}</span>` : ''}
-                    <span class="pill">${esc(e.type)}</span>
-                  </div>
-                  <p>${esc(e.desc)}</p>
+      schedEl.innerHTML = Object.keys(days).map(day => `
+        <div class="sched-day">
+          <h3 class="sched-day-title">${esc(day)}</h3>
+          ${days[day].sort((a, b) => timeVal(a.start) - timeVal(b.start)).map(e => `
+            <div class="sched-row">
+              <div class="sched-time">${esc(e.start)}${e.end ? '\u2013' + esc(e.end) : ''}</div>
+              <div class="sched-info">
+                <div class="sched-name">${esc(e.name)}</div>
+                <div class="sched-pills">
+                  ${e.venue ? `<span class="pill">${esc(e.venue)}</span>` : ''}
+                  <span class="pill">${esc(e.type)}</span>
                 </div>
-                <div class="sched-cta">
-                  ${e.tick && /^https?:\/\//i.test(e.tick)
-                    ? `<a class="sched-btn" href="${esc(e.tick)}" target="_blank" rel="noopener">Buy on Eventbrite</a>`
-                    : ''}
-                </div>
-              </div>`).join('')}
-          </div>`).join('');
-      }
+                <p>${esc(e.desc)}</p>
+              </div>
+              <div class="sched-cta">
+                ${isUrl(e.tick)
+                  ? `<a class="sched-btn" href="${esc(e.tick)}" target="_blank" rel="noopener">Buy on Eventbrite</a>`
+                  : ''}
+              </div>
+            </div>`).join('')}
+        </div>`).join('');
     }
+  }
 
-    // ---- person-style tables ----
-    const fillPeople = (tableName, gridId) => {
-      const t = tables[tableName], el = document.getElementById(gridId);
-      if (!t || !t.col || !t.rows.length || !el) return;
-      const g = getter(t);
-      el.innerHTML = t.rows.map((r, i) => personCard({
-        name: g(r, 'name'),
-        desc: g(r, 'description') || g(r, 'bio'),
-        img: g(r, 'image link')
-      }, i)).join('');
-    };
-    fillPeople('teams', 'teams-grid');
-    fillPeople('headliners', 'headliners-grid');
-    fillPeople('standup', 'standup-grid');
-    fillPeople('standups', 'standup-grid');
-    fillPeople('organizers', 'organizers-grid');
-
-    // ---- sponsors ----
-    const sp = tables['sponsors'], spEl = document.getElementById('sponsors-grid');
-    if (sp && sp.col && sp.rows.length && spEl) {
-      const g = getter(sp);
-      spEl.innerHTML = sp.rows.map(r => sponsorTile({
-        name: g(r, 'name'),
-        img: g(r, 'logo link') || g(r, 'image link'),
-        link: g(r, 'website') || g(r, 'link')
-      })).join('');
+  // ---- People table with Role routing (plus legacy per-group tables) ----
+  const fillGrid = (gridId, list) => {
+    const el = document.getElementById(gridId);
+    if (el && list.length) el.innerHTML = list.map((p, i) => personCard(p, i)).join('');
+  };
+  const people = tables['people'];
+  if (people && people.col && people.rows.length) {
+    const g = getter(people);
+    const groups = { 'organizers-grid': [], 'teams-grid': [], 'headliners-grid': [], 'standup-grid': [], sponsors: [] };
+    for (const r of people.rows) {
+      const role = g(r, 'role').toLowerCase();
+      const p = { name: g(r, 'name'), desc: g(r, 'description') || g(r, 'bio'),
+                  img: g(r, 'image link') || g(r, 'logo link'), link: g(r, 'website') || g(r, 'link') };
+      if (/sponsor/.test(role)) groups.sponsors.push(p);
+      else if (/team/.test(role)) groups['teams-grid'].push(p);
+      else if (/headlin/.test(role)) groups['headliners-grid'].push(p);
+      else if (/stand/.test(role)) groups['standup-grid'].push(p);
+      else groups['organizers-grid'].push(p);
     }
-  })
-  .catch(err => console.warn('Sheet load failed \u2014 keeping placeholder content:', err));
+    for (const gridId of ['organizers-grid','teams-grid','headliners-grid','standup-grid'])
+      fillGrid(gridId, groups[gridId]);
+    const spEl = document.getElementById('sponsors-grid');
+    if (spEl && groups.sponsors.length)
+      spEl.innerHTML = groups.sponsors.map(s => sponsorTile({ name: s.name, img: s.img, link: s.link })).join('');
+  }
+  const fillPeople = (tableName, gridId) => {
+    const t = tables[tableName];
+    if (!t || !t.col || !t.rows.length) return;
+    const g = getter(t);
+    fillGrid(gridId, t.rows.map(r => ({
+      name: g(r, 'name'), desc: g(r, 'description') || g(r, 'bio'), img: g(r, 'image link')
+    })));
+  };
+  fillPeople('teams', 'teams-grid');
+  fillPeople('headliners', 'headliners-grid');
+  fillPeople('standup', 'standup-grid');
+  fillPeople('standups', 'standup-grid');
+  fillPeople('organizers', 'organizers-grid');
+
+  const sp = tables['sponsors'], spEl = document.getElementById('sponsors-grid');
+  if (sp && sp.col && sp.rows.length && spEl) {
+    const g = getter(sp);
+    spEl.innerHTML = sp.rows.map(r => sponsorTile({
+      name: g(r, 'name'),
+      img: g(r, 'logo link') || g(r, 'image link'),
+      link: g(r, 'website') || g(r, 'link')
+    })).join('');
+  }
+
+  // ---- overlay text swap, after everything is rendered ----
+  applyOverlay(config);
+})
+.catch(err => console.warn('Sheet load failed \u2014 keeping placeholder content:', err));
 })();
