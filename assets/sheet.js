@@ -65,6 +65,23 @@ const clean = c => {
   return /^n\/a$/i.test(v) ? '' : v;
 };
 
+// duplicate header names: first occurrence wins the plain key,
+// later ones become "name 2", "name 3", ... (the sheet has two Type columns)
+function buildCols(cells) {
+  const col = {};
+  cells.forEach((h, i) => {
+    if (!h) return;
+    let k = h.toLowerCase();
+    if (col[k] !== undefined) {
+      let n = 2;
+      while (col[k + ' ' + n] !== undefined) n++;
+      k = k + ' ' + n;
+    }
+    col[k] = i;
+  });
+  return col;
+}
+
 // split rows into named tables (+ key/value config from kv sections and loose rows)
 function segment(rows) {
   const tables = {}, config = {};
@@ -86,9 +103,7 @@ function segment(rows) {
       if (low.indexOf('type') !== -1 && low.indexOf('name') !== -1) {
         cur = 'schedule';
         if (!tables.schedule) tables.schedule = { col: null, rows: [], kv: false };
-        const col = {};
-        cells.forEach((h, i) => { if (h) col[h.toLowerCase()] = i; });
-        tables.schedule.col = col;
+        tables.schedule.col = buildCols(cells);
         continue;
       }
     }
@@ -98,14 +113,14 @@ function segment(rows) {
       continue;
     }
     if (t && !t.col) {                             // header row of current table
-      const col = {};
-      cells.forEach((h, i) => { if (h) col[h.toLowerCase()] = i; });
-      t.col = col;
+      t.col = buildCols(cells);
       continue;
     }
     if (t) {
-      const nameIdx = t.col['name'];
-      if (nameIdx !== undefined && cells[nameIdx]) { t.rows.push(cells); continue; }
+      const nameIdx = t.col['name'], typeIdx = t.col['type'];
+      const keep = (nameIdx !== undefined && cells[nameIdx]) ||
+                   (typeIdx !== undefined && cells[typeIdx]);
+      if (keep) { t.rows.push(cells); continue; }
     }
     // NOTE: no loose key/value fallback — verbiage comes from Overlay rows/sections only
   }
@@ -217,7 +232,7 @@ Promise.all(TABS.map(tab => {
   const { tables, config } = segment(rows);
 
   // ---- route the main table's rows by Type ----
-  const events = [];
+  const events = [], passes = [];
   const typed = {
     'organizers-grid': [], 'teams-grid': [], 'headliners-grid': [],
     'standup-grid': [], 'solo-grid': [], 'standup-features-grid': [],
@@ -245,20 +260,31 @@ Promise.all(TABS.map(tab => {
         tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
       };
       if (/^(show|workshop|panel)$/i.test(type)) {
-        events.push(Object.assign(base, {
+        if (base.name) events.push(Object.assign(base, {
           type: type, day: g(r, 'day'), start: g(r, 't start'), end: g(r, 't end'),
           venue: g(r, 'venue'),
           feat: TRUTHY.test(g(r, 'featured') || g(r, 'is feature'))
         }));
       }
-      else if (/^overlay/i.test(type)) { if (base.name && base.desc) config[base.name] = base.desc; }
+      else if (/^pass/i.test(type)) {
+        if (base.name) passes.push(Object.assign(base, {
+          type: 'Pass',
+          feat: TRUTHY.test(g(r, 'featured') || g(r, 'is feature'))
+        }));
+      }
+      else if (/^overlay/i.test(type)) {
+        // Header Content column names the element; Description carries the wording
+        const el2 = g(r, 'header content') || base.name;
+        if (el2 && base.desc) config[el2] = base.desc;
+      }
       else if (/^(people|organizers?|teams?|headliners?|stand.?up|sponsors?|special)/i.test(type)) {
-        // category column decides the section; a bare People type defaults to Organizers
-        const cat = g(r, 'category') || g(r, 'group') || g(r, 'role')
+        // category comes from the second Type column (or Category/Group/Role)
+        const cat = g(r, 'category') || g(r, 'group') || g(r, 'role') || g(r, 'type 2')
                     || (/^people$/i.test(type) ? '' : type);
-        routePerson(base, cat);
-        // Headliner column: truthy marks this person for the Headliners section too
-        if (TRUTHY.test(g(r, 'headliner'))) typed['headliners-grid'].push(base);
+        if (base.name) {
+          routePerson(base, cat);
+          if (TRUTHY.test(g(r, 'headliner'))) typed['headliners-grid'].push(base);
+        }
       }
       // anything else (blank after N/A, unknown types) is ignored
     }
@@ -284,9 +310,9 @@ Promise.all(TABS.map(tab => {
   });
 
   // ---- events -> home cards, carousel, timetable ----
-  if (events.length) {
+  if (events.length || passes.length) {
     const carEl = document.getElementById('carousel');
-    const featured = events.filter(e => e.feat);
+    const featured = events.filter(e => e.feat).concat(passes.filter(p => p.feat));
     if (carEl && featured.length) {
       const arts = ['art-a', 'art-b', 'art-c'];
       carEl.innerHTML = featured.map((e, i) => {
@@ -326,7 +352,7 @@ Promise.all(TABS.map(tab => {
     }
 
     const schedEl = document.getElementById('schedule-list');
-    if (schedEl) {
+    if (schedEl && events.length) {
       const days = {};
       for (const e of events) {
         const d = e.day || 'Day TBD';
@@ -354,6 +380,28 @@ Promise.all(TABS.map(tab => {
             </div>`).join('')}
         </div>`).join('');
     }
+  }
+
+  // ---- Pass rows -> the tickets section ----
+  const ticketsEl = document.querySelector('.tickets');
+  if (ticketsEl && passes.length) {
+    const tiers = ['tk-fire', 'tk-gold', 'tk-silver'];
+    const tierNames = ['Fire', 'Gold', 'Silver'];
+    ticketsEl.innerHTML = passes.map((p, i) => `
+      <article class="ticket ${tiers[i % 3]}">
+        <div class="tk-body">
+          <div class="tk-top"><span class="tk-tier">${tierNames[i % 3]}</span><span class="tk-serial">\u2116 ${String(8 + i * 19).padStart(6, '0')}</span></div>
+          <h3>${esc(p.name)}</h3>
+          <p>${esc(p.desc)}</p>
+          ${isUrl(p.tick)
+            ? `<a class="tk-link" href="${esc(p.tick)}" target="_blank" rel="noopener">Buy on Eventbrite <span class="arr">\u2192</span></a>`
+            : ''}
+        </div>
+        <div class="tk-stub">
+          <span class="tk-admit">Admit All</span>
+          <div class="tk-barcode" aria-hidden="true"></div>
+        </div>
+      </article>`).join('');
   }
 
   // ---- Type-routed people, sponsors, special thanks ----
