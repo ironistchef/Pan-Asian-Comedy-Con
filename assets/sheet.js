@@ -79,6 +79,19 @@ function segment(rows) {
       if (!tables[name]) tables[name] = { col: null, rows: [], kv: !!KV_SECTIONS[name] };
       continue;
     }
+    // no title row needed: a row containing both "Type" and "Name" cells
+    // is recognized as the main table's header on its own
+    if (!cur) {
+      const low = cells.map(c => c.toLowerCase());
+      if (low.indexOf('type') !== -1 && low.indexOf('name') !== -1) {
+        cur = 'schedule';
+        if (!tables.schedule) tables.schedule = { col: null, rows: [], kv: false };
+        const col = {};
+        cells.forEach((h, i) => { if (h) col[h.toLowerCase()] = i; });
+        tables.schedule.col = col;
+        continue;
+      }
+    }
     const t = cur && tables[cur];
     if (t && t.kv) {                               // overlay/config: Key | Value pairs
       if (cells[0] && cells[1]) config[cells[0]] = cells[1];
