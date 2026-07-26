@@ -218,8 +218,21 @@ Promise.all(TABS.map(tab => {
 
   // ---- route the main table's rows by Type ----
   const events = [];
-  const typed = { 'organizers-grid': [], 'teams-grid': [], 'headliners-grid': [], 'standup-grid': [] };
-  const typedSponsors = [];
+  const typed = {
+    'organizers-grid': [], 'teams-grid': [], 'headliners-grid': [],
+    'standup-grid': [], 'solo-grid': [], 'standup-features-grid': [],
+    thanks: [], sponsors: []
+  };
+  const routePerson = (p, cat) => {
+    if (/sponsor/i.test(cat)) typed.sponsors.push(p);
+    else if (/special/i.test(cat)) typed.thanks.push(p);
+    else if (/solo/i.test(cat)) typed['solo-grid'].push(p);
+    else if (/stand/i.test(cat) && /feat/i.test(cat)) typed['standup-features-grid'].push(p);
+    else if (/stand/i.test(cat)) typed['standup-grid'].push(p);
+    else if (/team/i.test(cat)) typed['teams-grid'].push(p);
+    else if (/headlin/i.test(cat)) typed['headliners-grid'].push(p);
+    else typed['organizers-grid'].push(p);
+  };
   const sched = tables['schedule'];
   if (sched && sched.col && sched.rows.length) {
     const g = getter(sched);
@@ -239,11 +252,14 @@ Promise.all(TABS.map(tab => {
         }));
       }
       else if (/^overlay/i.test(type)) { if (base.name && base.desc) config[base.name] = base.desc; }
-      else if (/^(people|organizers?)$/i.test(type)) typed['organizers-grid'].push(base);
-      else if (/^teams?$/i.test(type)) typed['teams-grid'].push(base);
-      else if (/^headliners?$/i.test(type)) typed['headliners-grid'].push(base);
-      else if (/^stand.?ups?$/i.test(type)) typed['standup-grid'].push(base);
-      else if (/^sponsors?$/i.test(type)) typedSponsors.push(base);
+      else if (/^(people|organizers?|teams?|headliners?|stand.?up|sponsors?|special)/i.test(type)) {
+        // category column decides the section; a bare People type defaults to Organizers
+        const cat = g(r, 'category') || g(r, 'group') || g(r, 'role')
+                    || (/^people$/i.test(type) ? '' : type);
+        routePerson(base, cat);
+        // Headliner column: truthy marks this person for the Headliners section too
+        if (TRUTHY.test(g(r, 'headliner'))) typed['headliners-grid'].push(base);
+      }
       // anything else (blank after N/A, unknown types) is ignored
     }
   }
@@ -340,15 +356,25 @@ Promise.all(TABS.map(tab => {
     }
   }
 
-  // ---- Type-routed people + sponsors ----
+  // ---- Type-routed people, sponsors, special thanks ----
   const fillGridTyped = (gridId, list) => {
     const el = document.getElementById(gridId);
     if (el && list.length) el.innerHTML = list.map((p, i) => personCard(p, i)).join('');
   };
-  for (const gridId in typed) fillGridTyped(gridId, typed[gridId]);
+  for (const gridId in typed) {
+    if (gridId === 'thanks' || gridId === 'sponsors') continue;
+    fillGridTyped(gridId, typed[gridId]);
+  }
   const spTypedEl = document.getElementById('sponsors-grid');
-  if (spTypedEl && typedSponsors.length)
-    spTypedEl.innerHTML = typedSponsors.map(s => sponsorTile({ name: s.name, img: s.img, link: s.tick })).join('');
+  if (spTypedEl && typed.sponsors.length)
+    spTypedEl.innerHTML = typed.sponsors.map(s => sponsorTile({ name: s.name, img: s.img, link: s.tick })).join('');
+  const thanksEl = document.getElementById('special-thanks-list');
+  if (thanksEl && typed.thanks.length)
+    thanksEl.innerHTML = typed.thanks.map(p => `
+      <div class="thanks-item">
+        <span class="thanks-name">${esc(p.name)}</span>
+        ${p.desc ? `<span class="thanks-desc">${esc(p.desc)}</span>` : ''}
+      </div>`).join('');
 
   // ---- People table with Role routing (plus legacy per-group tables) ----
 
