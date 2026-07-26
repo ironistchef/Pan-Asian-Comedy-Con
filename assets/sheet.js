@@ -8,9 +8,10 @@
 
    Recognized tables and their columns (order doesn't matter):
      Schedule Table:   Type, Day, T Start, T End, Venue, Name, Description, Image Link,
-                       Is Feature, Ticket Link
-                       (Is Feature: TRUE / yes / x marks the event for the homepage carousel;
-                        Ticket Link: Eventbrite URL for that event's Tickets button)
+                       Featured, Purchase link
+                       (Featured: TRUE / yes / x toggles the event into the homepage carousel;
+                        Purchase link: Eventbrite URL for that event's buy button.
+                        Also accepted: "Is Feature", "Ticket Link", "Eventbrite", "Link")
      Teams Table:      Name, Description, Image Link
      Headliners Table: Name, Description, Image Link
      Standup Table:    Name, Description, Image Link
@@ -171,8 +172,8 @@ fetch(SHEET_URL)
         start: g(r, 't start'), end: g(r, 't end'),
         venue: g(r, 'venue'), name: g(r, 'name'),
         desc: g(r, 'description'), img: g(r, 'image link'),
-        feat: /^(true|yes|y|x|1|\u2713)$/i.test(g(r, 'is feature')),
-        tick: g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
+        feat: /^(true|yes|y|x|1|\u2713)$/i.test(g(r, 'featured') || g(r, 'is feature')),
+        tick: g(r, 'purchase link') || g(r, 'ticket link') || g(r, 'eventbrite') || g(r, 'link')
       })).filter(e => /^(show|workshop|panel)$/i.test(e.type));
 
       // ---- featured carousel from "Is Feature" column ----
@@ -239,7 +240,7 @@ fetch(SHEET_URL)
                 </div>
                 <div class="sched-cta">
                   ${e.tick && /^https?:\/\//i.test(e.tick)
-                    ? `<a class="sched-btn" href="${esc(e.tick)}" target="_blank" rel="noopener">Tickets</a>`
+                    ? `<a class="sched-btn" href="${esc(e.tick)}" target="_blank" rel="noopener">Buy on Eventbrite</a>`
                     : ''}
                 </div>
               </div>`).join('')}
