@@ -445,3 +445,30 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
 @media (max-width:640px){
   .sched-cta{padding-top:6px}
 }
+
+/* ---------- Tickets: vertical on desktop, horizontal stays for mobile ---------- */
+@media (min-width:720px){
+  .tickets{grid-template-columns:repeat(3,1fr);max-width:1100px;gap:24px;align-items:stretch}
+  .ticket{grid-template-columns:1fr;grid-template-rows:1fr auto;min-height:400px}
+  .ticket:hover{transform:translateY(-6px) rotate(-.6deg)}
+  .tk-body{padding:28px 26px}
+  .tk-body p{max-width:none}
+  /* perforation runs horizontally above the stub; notches punch the sides */
+  .tk-stub{
+    border-left:0;border-top:2px dashed rgba(11,5,3,.5);
+    flex-direction:row;justify-content:center;align-items:center;gap:18px;
+    padding:16px 18px;
+  }
+  .tk-fire .tk-stub{border-top-color:rgba(255,243,224,.55)}
+  .tk-stub::before{top:-14px;left:-14px;bottom:auto}
+  .tk-stub::after{top:-14px;right:-14px;bottom:auto;left:auto}
+  .tk-admit{writing-mode:horizontal-tb}
+  .tk-barcode{
+    width:72px;height:22px;
+    background:repeating-linear-gradient(90deg,
+      currentColor 0 2px, transparent 2px 4px,
+      currentColor 4px 7px, transparent 7px 9px,
+      currentColor 9px 10px, transparent 10px 13px);
+  }
+  .tk-flag{right:auto;left:50%;transform:translate(-50%,-50%)}
+}
