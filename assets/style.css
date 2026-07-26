@@ -511,3 +511,8 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
   .nav-links a::before{inset:0}
   .brand-name{display:inline} /* room for it now that links are tucked away */
 }
+
+/* ---------- People page: photos untouched ----------
+   No grayscale, no fire-duotone overlay — faces and logos stay true. */
+.page-people .card-img img{filter:none}
+.page-people .card-img::before{content:none}
