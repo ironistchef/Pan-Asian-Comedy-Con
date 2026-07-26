@@ -10,7 +10,7 @@
   --deep:#7A0E00;
   --line:rgba(255,174,0,.35);
   --line-soft:rgba(255,243,224,.14);
-  --display:"Bebas Neue",sans-serif;
+  --display:"Rajdhani",sans-serif;
   --body:"Instrument Sans",system-ui,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
@@ -409,4 +409,39 @@ footer .mark{font-family:var(--display);font-size:17px;color:var(--molten);lette
 @media (max-width:700px){
   .nav-links{gap:12px}
   .nav-links a{font-size:13px;letter-spacing:.06em;padding:6px 8px}
+}
+
+/* ---------- Rajdhani tuning ----------
+   Bebas was all-caps by nature; Rajdhani needs it set explicitly,
+   and reads best at semibold/bold in display roles. */
+.brand-name,.nav-links a,.hero h1,.hero-cta,.section-head h2,
+.slide-body h3,.card-body h3,.card-link,.tk-body h3,.tk-link,.tk-admit,
+.carousel-counter,footer .mark,.page-hero h1,.sched-day-title,.sched-name,
+.sponsor span{text-transform:uppercase}
+.hero h1,.page-hero h1{font-weight:700}
+.section-head h2,.slide-body h3,.card-body h3,.tk-body h3,
+.sched-day-title,.sched-name{font-weight:600}
+.brand-name,.nav-links a,.hero-cta,.card-link,.tk-link,.tk-admit,
+.carousel-counter,footer .mark,.sponsor span,.sched-time,.brand-mark{font-weight:600}
+/* Rajdhani is a touch wider than Bebas — rein in the hero a little */
+.hero h1{font-size:clamp(52px,11.5vw,160px);letter-spacing:.01em}
+
+/* ---------- Schedule: pills under title + Eventbrite button ---------- */
+.sched-pills{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 2px}
+.pill{
+  font-size:9.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  padding:3px 10px;border:1px solid var(--line);color:var(--molten);
+  background:rgba(11,5,3,.4);
+}
+.sched-cta{padding-top:2px}
+.sched-btn{
+  display:inline-block;background:var(--ember);color:var(--paper);
+  font-family:var(--display);font-weight:600;text-transform:uppercase;
+  font-size:15px;letter-spacing:.12em;padding:10px 24px;
+  text-decoration:none;white-space:nowrap;
+  transition:background .2s,color .2s;
+}
+.sched-btn:hover{background:var(--molten);color:var(--ink)}
+@media (max-width:640px){
+  .sched-cta{padding-top:6px}
 }
